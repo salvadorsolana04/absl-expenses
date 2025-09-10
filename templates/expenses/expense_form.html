@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Cargar gasto</h5>
+        <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+          {% csrf_token %}
+          <div class="row g-3">
+            <div class="col-6">{{ form.date.label_tag }}{{ form.date }}</div>
+            <div class="col-6">{{ form.category.label_tag }}{{ form.category }}</div>
+            <div class="col-6">{{ form.vendor.label_tag }}{{ form.vendor }}</div>
+            <div class="col-6">{{ form.amount.label_tag }}{{ form.amount }}</div>
+            <div class="col-6">{{ form.payment_method.label_tag }}{{ form.payment_method }}</div>
+            <div class="col-6">{{ form.project_code.label_tag }}{{ form.project_code }}</div>
+            <div class="col-12">{{ form.description.label_tag }}{{ form.description }}</div>
+            <div class="col-12">{{ form.notes.label_tag }}{{ form.notes }}</div>
+            <div class="col-12">
+              <label class="form-label">Fotos del recibo (podés subir varias)</label>
+              {{ rform.image }}
+              <div class="form-text">Se vinculan por fila al exportar: el Excel tendrá links a <code>receipts/…</code>.</div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-primary" type="submit">Agregar gasto</button>
+            <a class="btn btn-outline-secondary" href="/gastos/">Ver listado</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Cómo funciona</h6>
+        <ul class="small mb-0">
+          <li>El formulario se resetea después de cargar un gasto.</li>
+          <li>Podés adjuntar varias fotos por gasto.</li>
+          <li>El botón “Exportar ZIP” genera <code>expenses.xlsx</code> + carpeta <code>receipts/</code> con links relativos.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

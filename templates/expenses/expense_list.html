@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">Gastos</h5>
+      <div class="d-flex gap-2">
+        <a href="/" class="btn btn-outline-secondary">Cargar otro</a>
+        <a href="/export/zip/" class="btn btn-primary">Exportar ZIP</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>ID</th><th>Fecha</th><th>Categoría</th><th>Proveedor</th>
+            <th>Descripción</th><th>Monto</th><th>Pago</th><th>Obra</th><th>Recibos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in expenses %}
+          <tr>
+            <td>{{ e.id }}</td>
+            <td>{{ e.date }}</td>
+            <td>{{ e.category }}</td>
+            <td>{{ e.vendor }}</td>
+            <td>{{ e.description }}</td>
+            <td>${{ e.amount }}</td>
+            <td>{{ e.get_payment_method_display }}</td>
+            <td>{{ e.project_code }}</td>
+            <td>
+              {% for r in e.receipts.all %}
+                <a href="{{ r.image.url }}" target="_blank" class="badge text-bg-light text-decoration-underline">recibo {{ forloop.counter }}</a>
+              {% empty %}
+                <span class="text-muted">—</span>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if is_paginated %}
+    <nav>
+      <ul class="pagination pagination-sm">
+        {% if page_obj.has_previous %}
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">«</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">»</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
