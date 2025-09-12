@@ -2,19 +2,59 @@
 {% block content %}
 <div class="card shadow-sm">
   <div class="card-body">
+
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">Gastos</h5>
-      <div class="d-flex gap-2">
-        <a href="/" class="btn btn-outline-secondary">Cargar otro</a>
-        <a href="/export/zip/" class="btn btn-primary">Exportar ZIP</a>
-      </div>
+      {% with q=request.GET.urlencode %}
+        <div class="d-flex gap-2">
+          <a href="/" class="btn btn-outline-secondary">Cargar otro</a>
+          <a href="/export/zip/{% if q %}?{{ q }}{% endif %}" class="btn btn-primary">
+            Exportar ZIP{% if q %} (filtrado){% endif %}
+          </a>
+        </div>
+      {% endwith %}
     </div>
+
+    <!-- Filtros -->
+    <form class="row g-2 mb-3" method="get">
+      <div class="col-12 col-sm-auto">
+        <label class="form-label small mb-1">Desde</label>
+        {{ filter_form.start }}
+      </div>
+      <div class="col-12 col-sm-auto">
+        <label class="form-label small mb-1">Hasta</label>
+        {{ filter_form.end }}
+      </div>
+      <div class="col-12 col-sm-auto">
+        <label class="form-label small mb-1">Obra</label>
+        {{ filter_form.project }}
+      </div>
+      {% if filter_form.user %}
+      <div class="col-12 col-sm-auto">
+        <label class="form-label small mb-1">Usuario</label>
+        {{ filter_form.user }}
+      </div>
+      {% endif %}
+      <div class="col-12 col-sm-auto align-self-end">
+        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+        <a class="btn btn-outline-secondary" href="?">Limpiar</a>
+      </div>
+    </form>
+
     <div class="table-responsive">
       <table class="table table-sm align-middle">
         <thead>
           <tr>
-            <th>ID</th><th>Fecha</th><th>Categoría</th><th>Proveedor</th>
-            <th>Descripción</th><th>Monto</th><th>Pago</th><th>Obra</th><th>Recibos</th>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Categoría</th>
+            <th>Proveedor</th>
+            <th>Descripción</th>
+            <th>Monto</th>
+            <th>Pago</th>
+            <th>Obra</th>
+            {% if is_manager %}<th>Usuario</th>{% endif %}
+            <th>Recibos</th>
           </tr>
         </thead>
         <tbody>
@@ -27,14 +67,20 @@
             <td>{{ e.description }}</td>
             <td>${{ e.amount }}</td>
             <td>{{ e.get_payment_method_display }}</td>
-            <td>{{ e.project_code }}</td>
+            <td>{{ e.project|default:e.project_code }}</td>
+            {% if is_manager %}<td>{{ e.created_by.username }}</td>{% endif %}
             <td>
               {% for r in e.receipts.all %}
-                <a href="{{ r.image.url }}" target="_blank" class="badge text-bg-light text-decoration-underline">recibo {{ forloop.counter }}</a>
+                <a href="{{ r.image.url }}" target="_blank"
+                   class="badge text-bg-light text-decoration-underline">recibo {{ forloop.counter }}</a>
               {% empty %}
                 <span class="text-muted">—</span>
               {% endfor %}
             </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-4">No hay gastos para los filtros seleccionados.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -42,17 +88,25 @@
     </div>
 
     {% if is_paginated %}
-    <nav>
-      <ul class="pagination pagination-sm">
-        {% if page_obj.has_previous %}
-          <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">«</a></li>
-        {% endif %}
-        <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
-        {% if page_obj.has_next %}
-          <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">»</a></li>
-        {% endif %}
-      </ul>
-    </nav>
+      {% with q=request.GET.urlencode %}
+      <nav>
+        <ul class="pagination pagination-sm">
+          {% if page_obj.has_previous %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if q %}&{{ q }}{% endif %}">«</a>
+            </li>
+          {% endif %}
+          <li class="page-item disabled">
+            <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+          </li>
+          {% if page_obj.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if q %}&{{ q }}{% endif %}">»</a>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endwith %}
     {% endif %}
 
   </div>
