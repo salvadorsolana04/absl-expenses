@@ -1,6 +1,8 @@
+cat > .gitignore <<'EOF'
 .venv/
 __pycache__/
 db.sqlite3
 staticfiles/
 media/
 .env
+EOF
