@@ -1,14 +1,16 @@
 # expenses/views.py
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView
 from django.contrib import messages
 from django.http import HttpResponse
+from django.core.exceptions import PermissionDenied
 
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.decorators.http import require_POST
 
 from .models import Expense, Receipt, Project
 from .forms import ExpenseForm, ReceiptForm, ExpenseFilterForm
@@ -23,7 +25,7 @@ def is_manager(user):
 
 
 # --- Crear gasto ---
-@method_decorator(login_required, name='dispatch')  # ⬅️ NEW: requiere login para GET/POST
+@method_decorator(login_required, name='dispatch')  # requiere login para GET/POST
 class ExpenseCreateView(View):
     template_name = 'expenses/expense_form.html'
 
@@ -104,7 +106,7 @@ def _filtered_queryset(request):
 
 
 # --- Listado ---
-class ExpenseListView(LoginRequiredMixin, ListView):  # ⬅️ NEW: requiere login para ver la lista
+class ExpenseListView(LoginRequiredMixin, ListView):  # requiere login para ver la lista
     model = Expense
     template_name = 'expenses/expense_list.html'
     context_object_name = 'expenses'
@@ -127,7 +129,7 @@ class ExpenseListView(LoginRequiredMixin, ListView):  # ⬅️ NEW: requiere log
 
 
 # --- Export ZIP (respeta los mismos filtros/permiso que la lista) ---
-@login_required  # ⬅️ NEW: requiere login para exportar
+@login_required  # requiere login para exportar
 def export_zip(request):
     qs, form = _filtered_queryset(request)
     buf = build_export(qs)
@@ -152,3 +154,36 @@ def export_zip(request):
     resp = HttpResponse(buf.getvalue(), content_type='application/zip')
     resp['Content-Disposition'] = f'attachment; filename=\"{fname}\"'
     return resp
+
+
+# --- Borrado individual (Managers o superusuarios) ---
+@login_required
+@require_POST
+def delete_expense(request, pk):
+    """Borra un gasto individual. Permitido para Managers o superusuarios."""
+    if not (request.user.is_superuser or is_manager(request.user)):
+        raise PermissionDenied("Solo managers o superusuarios pueden borrar gastos.")
+
+    expense = get_object_or_404(Expense, pk=pk)
+    expense.delete()  # Receipt tiene on_delete=CASCADE → borra fotos asociadas
+
+    messages.success(request, f"Gasto #{pk} borrado.")
+    next_url = request.POST.get('next') or reverse('expense-list')
+    return redirect(next_url)
+
+
+# --- Borrado masivo de lo listado/filtrado (Managers o superusuarios) ---
+@login_required
+@require_POST
+def bulk_delete_expenses(request):
+    """Borra TODOS los gastos actualmente listados según los filtros. Managers o superusuarios."""
+    if not (request.user.is_superuser or is_manager(request.user)):
+        raise PermissionDenied("Solo managers o superusuarios pueden borrar gastos.")
+
+    qs, _ = _filtered_queryset(request)
+    count = qs.count()
+    qs.delete()  # borra en cascada receipts
+
+    messages.success(request, f"Se borraron {count} gasto(s).")
+    next_url = request.POST.get('next') or reverse('expense-list')
+    return redirect(next_url)
