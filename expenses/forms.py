@@ -1,41 +1,69 @@
 # expenses/forms.py
 from django import forms
 from django.contrib.auth.models import User
-from .models import Expense, Receipt, Project
+from .models import Expense, Receipt, Project, COST_CHOICES
 
 
-# ---------- Formulario de carga ----------
+# ---------- Expense entry form ----------
 class ExpenseForm(forms.ModelForm):
-    """Formulario de carga de gastos (incluye Project/Obra)."""
+    """Expense entry form (English) with cost type and job code."""
     class Meta:
         model = Expense
         fields = [
-            'date', 'category', 'vendor', 'description', 'amount',
-            'payment_method', 'project', 'project_code', 'notes'
+            'date', 'category', 'vendor',
+            'account', 'subaccount',      # NEW: shown above description
+            'description',
+            'quantity', 'unit_price',     # NEW
+            'cost_type',                  # NEW: Job/Equipment cost
+            'project', 'project_code',    # project_code label = Job/EQ#
+            'notes',
         ]
+        labels = {
+            'date': 'Date',
+            'category': 'Category',
+            'vendor': 'Vendor',
+            'account': 'Account',
+            'subaccount': 'Subaccount',
+            'description': 'Description',
+            'quantity': 'Quantity',
+            'unit_price': 'Price',
+            'cost_type': 'Cost',
+            'project': 'Job',
+            'project_code': 'Job/EQ#',
+            'notes': 'Notes',
+        }
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'category': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Combustible, Materiales'}),
-            'vendor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Proveedor'}),
-            'description': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Detalle'}),
-            'amount': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
-            'payment_method': forms.Select(attrs={'class': 'form-select'}),
-            'project': forms.Select(attrs={'class': 'form-select'}),      # selector de Obra
-            'project_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Obra/PO (texto)'}),
+            'category': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Fuel, Materials'}),
+            'vendor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Vendor'}),
+            'account': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Account'}),
+            'subaccount': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Subaccount'}),
+            'description': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Short description'}),
+            'quantity': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
+            'unit_price': forms.NumberInput(attrs={'step': '0.01', 'class': 'form-control'}),
+            'cost_type': forms.Select(choices=COST_CHOICES, attrs={'class': 'form-select'}),
+            'project': forms.Select(attrs={'class': 'form-select'}),
+            'project_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Job/EQ# (text)'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
-    # Validación simple
-    def clean_amount(self):
-        amount = self.cleaned_data.get('amount')
-        if amount is None or amount <= 0:
-            raise forms.ValidationError("El monto debe ser mayor que 0.")
-        return amount
+    # amount/total is calculated in model.save()
+    def clean_quantity(self):
+        q = self.cleaned_data.get('quantity')
+        if q is None or q <= 0:
+            raise forms.ValidationError("Quantity must be greater than 0.")
+        return q
+
+    def clean_unit_price(self):
+        p = self.cleaned_data.get('unit_price')
+        if p is None or p < 0:
+            raise forms.ValidationError("Price must be 0 or greater.")
+        return p
 
 
-# ---------- Subida de múltiples recibos ----------
+# ---------- Multiple receipts upload ----------
 class MultipleFileInput(forms.ClearableFileInput):
-    """Widget que soporta múltiples archivos."""
+    """Widget supporting multiple files."""
     allow_multiple_selected = True
 
 
@@ -50,7 +78,7 @@ class ReceiptForm(forms.ModelForm):
         fields = ['image']
 
 
-# ---------- Filtros de la lista/export ----------
+# ---------- Filters (kept) ----------
 class ExpenseFilterForm(forms.Form):
     start = forms.DateField(
         required=False,
@@ -60,13 +88,11 @@ class ExpenseFilterForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'})
     )
-    # Usamos queryset="none" y lo seteamos en __init__ para evitar evaluarlo en import-time
     project = forms.ModelChoiceField(
         queryset=Project.objects.none(),
         required=False,
         widget=forms.Select(attrs={'class': 'form-select'})
     )
-    # Visible solo para managers (se controla en __init__)
     user = forms.ModelChoiceField(
         queryset=User.objects.none(),
         required=False,
@@ -76,28 +102,23 @@ class ExpenseFilterForm(forms.Form):
     def __init__(self, *args, **kwargs):
         current_user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
-
-        # Poblar querysets ordenados (lo hacemos acá para que siempre refleje la BD actual)
         self.fields['project'].queryset = Project.objects.all().order_by('code', 'name')
-        self.fields['project'].empty_label = "Todas las obras"
+        self.fields['project'].empty_label = "All jobs"
 
-        # Si es manager mostramos el selector de usuario; si no, lo removemos
         is_manager = bool(
             current_user
             and (current_user.is_superuser or current_user.groups.filter(name__in=['Manager', 'Managers']).exists())
         )
         if is_manager:
             self.fields['user'].queryset = User.objects.all().order_by('username')
-            self.fields['user'].empty_label = "Todos los usuarios"
+            self.fields['user'].empty_label = "All users"
         else:
-            # Ocultar el campo a operadores
             self.fields.pop('user', None)
 
     def clean(self):
-        """Validación cruzada: start <= end."""
         cleaned = super().clean()
         start = cleaned.get('start')
         end = cleaned.get('end')
         if start and end and start > end:
-            self.add_error('end', 'La fecha "Hasta" debe ser posterior o igual a "Desde".')
+            self.add_error('end', '"To" date must be greater than or equal to "From" date.')
         return cleaned

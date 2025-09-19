@@ -4,52 +4,52 @@
   <div class="card-body">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">Gastos</h5>
+      <h5 class="mb-0">Expenses</h5>
       {% with q=request.GET.urlencode %}
         <div class="d-flex gap-2">
-          <a href="/" class="btn btn-outline-secondary">Cargar otro</a>
+          <a href="/" class="btn btn-outline-secondary">New expense</a>
           <a href="/export/zip/{% if q %}?{{ q }}{% endif %}" class="btn btn-primary">
-            Exportar ZIP{% if q %} (filtrado){% endif %}
+            Export ZIP{% if q %} (filtered){% endif %}
           </a>
 
           {% if request.user.is_superuser or is_manager %}
-          <!-- Borrar todos (Managers o superusuarios) -->
+          <!-- Delete ALL (Managers or superusers) -->
           <form method="post"
                 action="{% url 'expense-bulk-delete' %}{% if q %}?{{ q }}{% endif %}"
                 class="d-inline"
-                onsubmit="return confirm('¿Seguro que querés BORRAR TODOS los gastos listados? Esta acción no se puede deshacer.');">
+                onsubmit="return confirm('Are you sure you want to DELETE ALL listed expenses? This cannot be undone.');">
             {% csrf_token %}
             <input type="hidden" name="next" value="/gastos/{% if q %}?{{ q }}{% endif %}">
-            <button class="btn btn-danger" type="submit">Borrar todos</button>
+            <button class="btn btn-danger" type="submit">Delete all</button>
           </form>
           {% endif %}
         </div>
       {% endwith %}
     </div>
 
-    <!-- Filtros -->
+    <!-- Filters -->
     <form class="row g-2 mb-3" method="get">
       <div class="col-12 col-sm-auto">
-        <label class="form-label small mb-1">Desde</label>
+        <label class="form-label small mb-1">From</label>
         {{ filter_form.start }}
       </div>
       <div class="col-12 col-sm-auto">
-        <label class="form-label small mb-1">Hasta</label>
+        <label class="form-label small mb-1">To</label>
         {{ filter_form.end }}
       </div>
       <div class="col-12 col-sm-auto">
-        <label class="form-label small mb-1">Obra</label>
+        <label class="form-label small mb-1">Job</label>
         {{ filter_form.project }}
       </div>
       {% if filter_form.user %}
       <div class="col-12 col-sm-auto">
-        <label class="form-label small mb-1">Usuario</label>
+        <label class="form-label small mb-1">User</label>
         {{ filter_form.user }}
       </div>
       {% endif %}
       <div class="col-12 col-sm-auto align-self-end">
-        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
-        <a class="btn btn-outline-secondary" href="?">Limpiar</a>
+        <button class="btn btn-outline-primary" type="submit">Filter</button>
+        <a class="btn btn-outline-secondary" href="?">Clear</a>
       </div>
     </form>
 
@@ -58,16 +58,20 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>Fecha</th>
-            <th>Categoría</th>
-            <th>Proveedor</th>
-            <th>Descripción</th>
-            <th>Monto</th>
-            <th>Pago</th>
-            <th>Obra</th>
-            {% if is_manager %}<th>Usuario</th>{% endif %}
-            <th>Recibos</th>
-            {% if request.user.is_superuser or is_manager %}<th>Acciones</th>{% endif %}
+            <th>Date</th>
+            <th>Category</th>
+            <th>Vendor</th>
+            <th>Account</th>
+            <th>Subaccount</th>
+            <th>Description</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Total</th>
+            <th>Cost</th>
+            <th>Job</th>
+            {% if is_manager %}<th>User</th>{% endif %}
+            <th>Receipts</th>
+            {% if request.user.is_superuser or is_manager %}<th>Actions</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -77,15 +81,19 @@
             <td>{{ e.date }}</td>
             <td>{{ e.category }}</td>
             <td>{{ e.vendor }}</td>
+            <td>{{ e.account }}</td>
+            <td>{{ e.subaccount }}</td>
             <td>{{ e.description }}</td>
-            <td>${{ e.amount }}</td>
-            <td>{{ e.get_payment_method_display }}</td>
+            <td>{{ e.quantity }}</td>
+            <td>${{ e.unit_price }}</td>
+            <td>${{ e.total }}</td>
+            <td>{{ e.get_cost_type_display }}</td>
             <td>{{ e.project|default:e.project_code }}</td>
             {% if is_manager %}<td>{{ e.created_by.username }}</td>{% endif %}
             <td>
               {% for r in e.receipts.all %}
                 <a href="{{ r.image.url }}" target="_blank"
-                   class="badge text-bg-light text-decoration-underline">recibo {{ forloop.counter }}</a>
+                   class="badge text-bg-light text-decoration-underline">receipt {{ forloop.counter }}</a>
               {% empty %}
                 <span class="text-muted">—</span>
               {% endfor %}
@@ -97,10 +105,10 @@
               <form method="post"
                     action="{% url 'expense-delete' e.id %}{% if q %}?{{ q }}{% endif %}"
                     class="d-inline"
-                    onsubmit="return confirm('¿Eliminar el gasto #{{ e.id }}? Esta acción no se puede deshacer.');">
+                    onsubmit="return confirm('Delete expense #{{ e.id }}? This cannot be undone.');">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="/gastos/{% if q %}?{{ q }}{% endif %}">
-                <button class="btn btn-outline-danger btn-sm" type="submit">Borrar</button>
+                <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
               </form>
               {% endwith %}
             </td>
@@ -108,9 +116,9 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="{% if request.user.is_superuser or is_manager %}{% if is_manager %}12{% else %}11{% endif %}{% else %}{% if is_manager %}11{% else %}10{% endif %}{% endif %}"
+            <td colspan="{% if request.user.is_superuser or is_manager %}{% if is_manager %}15{% else %}14{% endif %}{% else %}{% if is_manager %}14{% else %}13{% endif %}{% endif %}"
                 class="text-center text-muted py-4">
-              No hay gastos para los filtros seleccionados.
+              No expenses for the selected filters.
             </td>
           </tr>
           {% endfor %}
@@ -128,7 +136,7 @@
             </li>
           {% endif %}
           <li class="page-item disabled">
-            <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
           </li>
           {% if page_obj.has_next %}
             <li class="page-item">

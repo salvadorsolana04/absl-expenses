@@ -1,52 +1,82 @@
-from io import BytesIO
-from zipfile import ZipFile, ZIP_DEFLATED
+# expenses/utils.py
+import io
+import os
+import zipfile
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from django.utils.text import slugify
+from django.core.files.storage import default_storage
 
-HEADERS = [
-    'ID','Fecha','Categoría','Proveedor','Descripción','Monto','Medio de pago','Código/Obra','Notas','Recibos (links)'
+# Headers and widths in the exact order you requested
+EXPORT_HEADERS = [
+    "id",                 # 1
+    "job code/number",    # 2 -> project_code or project name
+    "description",        # 3
+    "quantity",           # 4
+    "price",              # 5
+    "total",              # 6
+    "account",            # 7
+    "subaccount",         # 8
+    "user",               # 9
+    "receipt",            # 10 (relative path inside the zip)
 ]
+COL_WIDTHS = [6, 20, 40, 12, 12, 12, 16, 18, 18, 28]
 
-COL_WIDTHS = [6,12,18,24,36,12,16,16,24,30]
 
 def build_export(expenses_qs):
-    # 1) Excel in-memory
+    """
+    Returns an in-memory ZIP containing:
+      - expenses.xlsx with the requested columns
+      - receipts/ folder with the images referenced in the sheet
+    """
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Gastos'
+    ws.title = "expenses"
 
-    ws.append(HEADERS)
+    # Headers + widths
+    ws.append(EXPORT_HEADERS)
     for i, w in enumerate(COL_WIDTHS, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    rows = []
-    for e in expenses_qs.select_related().prefetch_related('receipts').order_by('date','id'):
-        links = []
-        for r in e.receipts.all():
-            fname = r.export_filename()
-            links.append(f'=HYPERLINK("receipts/{fname}", "{fname}")')
-        link_cell = ", ".join(links) if links else ''
-        rows.append([
-            e.id, e.date.isoformat(), e.category, e.vendor, e.description,
-            float(e.amount), e.payment_method, e.project_code, e.notes, link_cell
+    mem = io.BytesIO()
+    zf = zipfile.ZipFile(mem, mode="w", compression=zipfile.ZIP_DEFLATED)
+
+    def add_receipt_to_zip(storage_path, zip_rel_path):
+        with default_storage.open(storage_path, "rb") as fh:
+            zf.writestr(zip_rel_path, fh.read())
+
+    # Build rows and copy first receipt (if any)
+    for e in expenses_qs.select_related('project', 'created_by').prefetch_related('receipts').order_by('date', 'id'):
+        job_code = e.project_code or (e.project.name if getattr(e, "project", None) else "")
+
+        first_receipt_rel = ""
+        receipts = list(e.receipts.all())
+        if receipts:
+            r0 = receipts[0]
+            storage_path = r0.image.name
+            filename = os.path.basename(storage_path)
+            zip_path = f"receipts/{e.id}_{filename}"
+            add_receipt_to_zip(storage_path, zip_path)
+            first_receipt_rel = zip_path
+
+        ws.append([
+            e.id,
+            job_code,
+            e.description or "",
+            float(e.quantity or 0),
+            float(e.unit_price or 0),
+            float(e.total or 0),
+            e.account or "",
+            e.subaccount or "",
+            (e.created_by.username if e.created_by else ""),
+            first_receipt_rel,
         ])
 
-    for row in rows:
-        ws.append(row)
+    # Save workbook inside the zip
+    xls_bytes = io.BytesIO()
+    wb.save(xls_bytes)
+    xls_bytes.seek(0)
+    zf.writestr("expenses.xlsx", xls_bytes.read())
 
-    out_xlsx = BytesIO()
-    wb.save(out_xlsx)
-    out_xlsx.seek(0)
-
-    # 2) ZIP with excel + receipts
-    zip_buffer = BytesIO()
-    with ZipFile(zip_buffer, 'w', ZIP_DEFLATED) as zf:
-        zf.writestr('expenses.xlsx', out_xlsx.getvalue())
-        for e in expenses_qs.prefetch_related('receipts'):
-            for r in e.receipts.all():
-                arcname = f"receipts/{r.export_filename()}"
-                with r.image.open('rb') as f:
-                    zf.writestr(arcname, f.read())
-    zip_buffer.seek(0)
-    return zip_buffer
+    zf.close()
+    mem.seek(0)
+    return mem
