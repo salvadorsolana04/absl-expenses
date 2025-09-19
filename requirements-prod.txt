@@ -1,0 +1,5 @@
+-r requirements.txt
+psycopg2-binary==2.9.9
+# Si luego usamos S3 para media, descomenta estas 2 líneas:
+# boto3==1.34.162
+# django-storages==1.14.3
